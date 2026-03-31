@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { AnimeCard } from "@/components/anime/anime-card";
 import { PageContainer } from "@/components/layout/page-container";
@@ -9,8 +9,14 @@ import { ViewToggle } from "@/components/ui/view-toggle";
 import { useViewToggle } from "@/hooks/use-view-toggle";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Search, UserPlus, LogOut, X, Copy, Share2 } from "lucide-react";
+import { Search, UserPlus, LogOut, X } from "lucide-react";
 import type { VaultDetail } from "@/types/vault";
+
+interface SearchUser {
+  id: string;
+  name: string;
+  avatar_url: string | null;
+}
 
 const STATUS_FILTERS: Array<{ key: string; label: string }> = [
   { key: "all", label: "All" },
@@ -30,10 +36,12 @@ export function VaultDetailClient({ vault }: VaultDetailClientProps) {
   const { view, toggleView } = useViewToggle(`vault-${vault.id}`);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [showInvite, setShowInvite] = useState(false);
-  const [inviteUrl, setInviteUrl] = useState<string | null>(null);
-  const [loadingInvite, setLoadingInvite] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [showAddMember, setShowAddMember] = useState(false);
+  const [memberSearch, setMemberSearch] = useState("");
+  const [memberResults, setMemberResults] = useState<SearchUser[]>([]);
+  const [loadingSearch, setLoadingSearch] = useState(false);
+  const [addingUserId, setAddingUserId] = useState<string | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const filteredAnime = vault.anime.filter((va) => {
     const matchesSearch = !search || va.anime?.title.toLowerCase().includes(search.toLowerCase());
@@ -41,15 +49,38 @@ export function VaultDetailClient({ vault }: VaultDetailClientProps) {
     return matchesSearch && matchesStatus;
   });
 
-  const handleCopy = async () => {
-    if (!inviteUrl) return;
-    await navigator.clipboard.writeText(inviteUrl);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const handleMemberSearchChange = (value: string) => {
+    setMemberSearch(value);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (!value.trim()) {
+      setMemberResults([]);
+      return;
+    }
+    debounceRef.current = setTimeout(async () => {
+      setLoadingSearch(true);
+      const res = await fetch(`/api/users/search?q=${encodeURIComponent(value)}&vaultId=${vault.id}`);
+      const data = await res.json();
+      setMemberResults(data.users ?? []);
+      setLoadingSearch(false);
+    }, 300);
+  };
+
+  const handleAddMember = async (userId: string, userName: string) => {
+    setAddingUserId(userId);
+    const res = await fetch(`/api/vaults/${vault.id}/members`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId }),
+    });
+    if (res.ok) {
+      setMemberResults((prev) => prev.filter((u) => u.id !== userId));
+      router.refresh();
+    }
+    setAddingUserId(null);
   };
 
   const handleLeave = async () => {
-    if (!confirm("Leave this vault? You can rejoin via invite.")) return;
+    if (!confirm("Leave this vault?")) return;
     await fetch(`/api/vaults/${vault.id}/leave`, { method: "POST" });
     router.push("/vaults");
   };
@@ -86,18 +117,13 @@ export function VaultDetailClient({ vault }: VaultDetailClientProps) {
           <div className="flex items-center gap-2">
             {vault.type === "shared" && (
               <button
-                onClick={async () => {
-                  setShowInvite(true);
-                  if (!inviteUrl) {
-                    setLoadingInvite(true);
-                    const res = await fetch(`/api/vaults/${vault.id}/invite`, { method: "POST" });
-                    const data = await res.json();
-                    setInviteUrl(data.url ?? null);
-                    setLoadingInvite(false);
-                  }
+                onClick={() => {
+                  setShowAddMember(true);
+                  setMemberSearch("");
+                  setMemberResults([]);
                 }}
                 className="p-2 rounded-xl bg-white/5"
-                title="Invite member"
+                title="Add member"
               >
                 <UserPlus size={18} className="text-[var(--text-muted)]" />
               </button>
@@ -167,12 +193,12 @@ export function VaultDetailClient({ vault }: VaultDetailClientProps) {
         )}
       </div>
 
-      {/* Invite sheet */}
-      {showInvite && (
+      {/* Add Member sheet */}
+      {showAddMember && (
         <>
           <div
             className="fixed inset-0 bg-black/50 z-[49]"
-            onClick={() => setShowInvite(false)}
+            onClick={() => setShowAddMember(false)}
           />
           <div
             className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[480px] bg-[var(--surface)] rounded-t-2xl z-[60] px-4 pt-4"
@@ -180,53 +206,56 @@ export function VaultDetailClient({ vault }: VaultDetailClientProps) {
           >
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-base font-bold text-[var(--text)]">
-                Invite to {vault.name}
+                Add to {vault.name}
               </h2>
               <button
-                onClick={() => setShowInvite(false)}
+                onClick={() => setShowAddMember(false)}
                 className="p-1.5 rounded-lg bg-white/5"
               >
                 <X size={18} className="text-[var(--text-muted)]" />
               </button>
             </div>
 
-            {loadingInvite ? (
-              <p className="text-sm text-[var(--text-muted)] text-center py-4">
-                Generating invite link…
-              </p>
-            ) : inviteUrl ? (
-              <>
-                <div className="flex items-center gap-2 bg-white/5 rounded-xl px-3 py-2 mb-3">
-                  <span className="text-xs text-[var(--text-muted)] truncate flex-1">
-                    {inviteUrl}
-                  </span>
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={handleCopy}
-                    className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-[var(--accent)] text-white text-sm font-semibold"
-                  >
-                    <Copy size={16} />
-                    {copied ? "Copied!" : "Copy Link"}
-                  </button>
-                  {typeof navigator !== "undefined" && "share" in navigator && (
+            <div className="relative mb-3">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--text-muted)] pointer-events-none" />
+              <Input
+                type="search"
+                placeholder="Search by name or email…"
+                value={memberSearch}
+                onChange={(e) => handleMemberSearchChange(e.target.value)}
+                className="pl-10"
+                autoFocus
+              />
+            </div>
+
+            {loadingSearch && (
+              <p className="text-sm text-[var(--text-muted)] text-center py-4">Searching…</p>
+            )}
+
+            {!loadingSearch && memberSearch.trim() && memberResults.length === 0 && (
+              <p className="text-sm text-[var(--text-muted)] text-center py-4">No users found.</p>
+            )}
+
+            {memberResults.length > 0 && (
+              <ul className="space-y-2 max-h-60 overflow-y-auto">
+                {memberResults.map((u) => (
+                  <li key={u.id} className="flex items-center gap-3 px-2 py-2 rounded-xl bg-white/5">
+                    <Avatar className="w-8 h-8 shrink-0">
+                      <AvatarFallback className="text-xs">
+                        {u.name?.charAt(0)?.toUpperCase() || "?"}
+                      </AvatarFallback>
+                    </Avatar>
+                    <span className="flex-1 text-sm text-[var(--text)] truncate">{u.name}</span>
                     <button
-                      onClick={() => navigator.share({ url: inviteUrl })}
-                      className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-white/8 text-[var(--text)] text-sm font-semibold"
+                      onClick={() => handleAddMember(u.id, u.name)}
+                      disabled={addingUserId === u.id}
+                      className="px-3 py-1 rounded-lg bg-[var(--accent)] text-white text-xs font-semibold disabled:opacity-50"
                     >
-                      <Share2 size={16} />
-                      Share
+                      {addingUserId === u.id ? "Adding…" : "Add"}
                     </button>
-                  )}
-                </div>
-                <p className="text-xs text-[var(--text-muted)] text-center mt-3">
-                  Link expires in 7 days
-                </p>
-              </>
-            ) : (
-              <p className="text-sm text-[var(--text-muted)] text-center py-4">
-                Failed to generate invite link.
-              </p>
+                  </li>
+                ))}
+              </ul>
             )}
           </div>
         </>

@@ -96,9 +96,9 @@ export function VaultsClient({ vaults: initialVaults, isAuthenticated }: VaultsC
       {/* Create vault sheet */}
       {showCreate && (
         <>
-          <div className="fixed inset-0 bg-black/60 z-40 animate-fade-in" onClick={() => setShowCreate(false)} />
+          <div className="fixed inset-0 bg-black/60 z-[49] animate-fade-in" onClick={() => setShowCreate(false)} />
           <div
-            className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[480px] z-50 animate-slide-up rounded-t-[28px] p-5"
+            className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[480px] z-[60] animate-slide-up rounded-t-[28px] p-5"
             style={{
               background: "rgba(14,14,24,0.98)",
               backdropFilter: "blur(20px)",

@@ -1,0 +1,133 @@
+@import "tailwindcss";
+
+:root {
+  --background: #06060C;
+  --card: rgba(14, 14, 24, 0.85);
+  --card-border: rgba(255, 255, 255, 0.06);
+  --accent: #FF6B35;
+  --accent-alt: #E8453C;
+  --purple: #A855F7;
+  --green: #22C55E;
+  --blue: #3B82F6;
+  --yellow: #F59E0B;
+  --red: #EF4444;
+  --cyan: #22D3EE;
+  --text: #E8E6F0;
+  --text-muted: rgba(255, 255, 255, 0.4);
+  --text-dim: rgba(255, 255, 255, 0.2);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-card: var(--card);
+  --color-card-border: var(--card-border);
+  --color-accent: var(--accent);
+  --color-accent-alt: var(--accent-alt);
+  --color-purple: var(--purple);
+  --color-green: var(--green);
+  --color-blue: var(--blue);
+  --color-yellow: var(--yellow);
+  --color-red: var(--red);
+  --color-cyan: var(--cyan);
+  --color-text: var(--text);
+  --color-text-muted: var(--text-muted);
+  --color-text-dim: var(--text-dim);
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideLeft {
+  from { opacity: 0; transform: translateX(20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes pulse-scale {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.06); }
+}
+
+.animate-slide-up {
+  animation: slideUp 0.4s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.35s ease forwards;
+}
+
+.animate-slide-left {
+  animation: slideLeft 0.35s ease forwards;
+}
+
+.animate-pulse-scale {
+  animation: pulse-scale 2s infinite;
+}
+
+body {
+  background: var(--background);
+  color: var(--text);
+  font-family: 'DM Sans', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Mobile-first max-width container */
+.app-container {
+  max-width: 480px;
+  margin: 0 auto;
+  min-height: 100svh;
+  background: var(--background);
+  position: relative;
+}
+
+/* Horizontal scroll utilities */
+.scroll-x-snap {
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+}
+
+.scroll-snap-start {
+  scroll-snap-align: start;
+}
+
+/* Press feedback */
+.press-feedback {
+  transition: transform 0.12s ease, opacity 0.12s ease;
+}
+
+.press-feedback:active {
+  transform: scale(0.97);
+  opacity: 0.85;
+}
+
+/* Hide scrollbar visually but keep scrolling */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* Safe area padding for bottom nav */
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Typography */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-syne, sans-serif);
+}
+

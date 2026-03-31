@@ -9,7 +9,7 @@ import { ViewToggle } from "@/components/ui/view-toggle";
 import { useViewToggle } from "@/hooks/use-view-toggle";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Search, UserPlus, LogOut } from "lucide-react";
+import { Search, UserPlus, LogOut, X, Copy, Share2 } from "lucide-react";
 import type { VaultDetail } from "@/types/vault";
 
 const STATUS_FILTERS: Array<{ key: string; label: string }> = [
@@ -30,12 +30,23 @@ export function VaultDetailClient({ vault }: VaultDetailClientProps) {
   const { view, toggleView } = useViewToggle(`vault-${vault.id}`);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [showInvite, setShowInvite] = useState(false);
+  const [inviteUrl, setInviteUrl] = useState<string | null>(null);
+  const [loadingInvite, setLoadingInvite] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const filteredAnime = vault.anime.filter((va) => {
     const matchesSearch = !search || va.anime?.title.toLowerCase().includes(search.toLowerCase());
     const matchesStatus = statusFilter === "all" || va.user_anime_data?.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
+
+  const handleCopy = async () => {
+    if (!inviteUrl) return;
+    await navigator.clipboard.writeText(inviteUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   const handleLeave = async () => {
     if (!confirm("Leave this vault? You can rejoin via invite.")) return;
@@ -75,7 +86,16 @@ export function VaultDetailClient({ vault }: VaultDetailClientProps) {
           <div className="flex items-center gap-2">
             {vault.type === "shared" && (
               <button
-                onClick={() => {/* TODO: invite sheet */}}
+                onClick={async () => {
+                  setShowInvite(true);
+                  if (!inviteUrl) {
+                    setLoadingInvite(true);
+                    const res = await fetch(`/api/vaults/${vault.id}/invite`, { method: "POST" });
+                    const data = await res.json();
+                    setInviteUrl(data.url ?? null);
+                    setLoadingInvite(false);
+                  }
+                }}
                 className="p-2 rounded-xl bg-white/5"
                 title="Invite member"
               >
@@ -146,6 +166,71 @@ export function VaultDetailClient({ vault }: VaultDetailClientProps) {
           })
         )}
       </div>
+
+      {/* Invite sheet */}
+      {showInvite && (
+        <>
+          <div
+            className="fixed inset-0 bg-black/50 z-[49]"
+            onClick={() => setShowInvite(false)}
+          />
+          <div
+            className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[480px] bg-[var(--surface)] rounded-t-2xl z-[60] px-4 pt-4"
+            style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 24px)" }}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-base font-bold text-[var(--text)]">
+                Invite to {vault.name}
+              </h2>
+              <button
+                onClick={() => setShowInvite(false)}
+                className="p-1.5 rounded-lg bg-white/5"
+              >
+                <X size={18} className="text-[var(--text-muted)]" />
+              </button>
+            </div>
+
+            {loadingInvite ? (
+              <p className="text-sm text-[var(--text-muted)] text-center py-4">
+                Generating invite link…
+              </p>
+            ) : inviteUrl ? (
+              <>
+                <div className="flex items-center gap-2 bg-white/5 rounded-xl px-3 py-2 mb-3">
+                  <span className="text-xs text-[var(--text-muted)] truncate flex-1">
+                    {inviteUrl}
+                  </span>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleCopy}
+                    className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-[var(--accent)] text-white text-sm font-semibold"
+                  >
+                    <Copy size={16} />
+                    {copied ? "Copied!" : "Copy Link"}
+                  </button>
+                  {typeof navigator !== "undefined" && "share" in navigator && (
+                    <button
+                      onClick={() => navigator.share({ url: inviteUrl })}
+                      className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-white/8 text-[var(--text)] text-sm font-semibold"
+                    >
+                      <Share2 size={16} />
+                      Share
+                    </button>
+                  )}
+                </div>
+                <p className="text-xs text-[var(--text-muted)] text-center mt-3">
+                  Link expires in 7 days
+                </p>
+              </>
+            ) : (
+              <p className="text-sm text-[var(--text-muted)] text-center py-4">
+                Failed to generate invite link.
+              </p>
+            )}
+          </div>
+        </>
+      )}
 
       <BottomNav />
     </PageContainer>

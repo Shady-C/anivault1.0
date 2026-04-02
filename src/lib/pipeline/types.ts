@@ -63,5 +63,6 @@ export interface SearchResultEntry {
     | "failed"
     | "no-results";
   approvedMatch: JikanResult | null;
+  fetchedBlob?: JikanBlob | null;
   error?: string;
 }

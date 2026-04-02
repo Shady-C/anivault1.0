@@ -20,11 +20,10 @@ export async function POST(request: Request) {
     return Response.json({ error: "malId must be a number" }, { status: 400 });
   }
 
-  const [detail, characters, episodes] = await Promise.all([
-    getDetailAnime(malId),
-    getAnimeCharacters(malId),
-    getEpisodeAnime(malId),
-  ]);
+  // Sequential to respect Jikan rate limits (parallel triples the request rate)
+  const detail = await getDetailAnime(malId);
+  const characters = await getAnimeCharacters(malId);
+  const episodes = await getEpisodeAnime(malId);
 
   if (detail.error) {
     return Response.json(

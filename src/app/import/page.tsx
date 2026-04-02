@@ -9,6 +9,7 @@ import { useImportSearch } from "@/hooks/use-import-search";
 import type {
   ParsedEntry,
   JikanResult,
+  JikanBlob,
   SearchResultEntry,
   FetchedEntry,
   IngestResult,
@@ -150,54 +151,100 @@ export default function ImportPage() {
   // --- Step 3: Ingest ---
   const handleConfirmImport = useCallback(
     async (vaultId: string): Promise<IngestResult> => {
-      // Build FetchedEntry[] from approved results
       const confirmed: FetchedEntry[] = [];
+      const needsFetch: { index: number; malId: number; entry: ParsedEntry }[] = [];
 
+      // Separate entries with cached blobs from those needing fetch
       for (const [indexStr, result] of Object.entries(searchResults)) {
         if (result.status !== "approved" || !result.approvedMatch) continue;
         const index = Number(indexStr);
         const entry = parsedEntries[index];
         if (!entry) continue;
 
-        // Fetch full blob for approved entries that came from search
-        // (direct mal_id entries already have their blob stored during batch)
-        let blob = null;
+        if (result.fetchedBlob) {
+          confirmed.push({
+            parsed: entry,
+            mal_id: result.approvedMatch.malId,
+            jikan_blob: result.fetchedBlob,
+            search_confidence: result.confidence,
+          });
+        } else {
+          needsFetch.push({ index, malId: result.approvedMatch.malId, entry });
+        }
+      }
+
+      // Bulk fetch entries that don't have cached blobs (name-only search results)
+      if (needsFetch.length > 0) {
         try {
-          const res = await fetch("/api/import/fetch-full", {
+          const res = await fetch("/api/import/fetch-bulk", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ malId: result.approvedMatch.malId }),
+            body: JSON.stringify({ malIds: needsFetch.map((e) => e.malId) }),
           });
-          if (res.ok) blob = await res.json();
+          if (res.ok) {
+            const blobs: Record<string, JikanBlob> = await res.json();
+            for (const item of needsFetch) {
+              const blob = blobs[String(item.malId)];
+              if (blob) {
+                confirmed.push({
+                  parsed: item.entry,
+                  mal_id: item.malId,
+                  jikan_blob: blob,
+                  search_confidence:
+                    searchResults[item.index]?.confidence ?? "none",
+                });
+              }
+            }
+          }
         } catch {
-          // Skip entries where fetch fails
+          // Bulk fetch failed — entries without blobs are skipped
+        }
+      }
+
+      // Batch ingest in chunks of 100 to stay under body size limits
+      const BATCH_SIZE = 100;
+      const totalResult: IngestResult = {
+        inserted: 0,
+        updated: 0,
+        skipped: 0,
+        vault_anime_created: 0,
+        user_anime_data_created: 0,
+      };
+
+      for (let i = 0; i < confirmed.length; i += BATCH_SIZE) {
+        const batch = confirmed.slice(i, i + BATCH_SIZE);
+        const res = await fetch("/api/import/ingest", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ entries: batch, vault_id: vaultId }),
+        });
+
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.error || "Import failed");
         }
 
-        if (!blob) continue;
+        const batchResult: IngestResult = await res.json();
+        totalResult.inserted += batchResult.inserted;
+        totalResult.updated += batchResult.updated;
+        totalResult.skipped += batchResult.skipped;
+        totalResult.vault_anime_created += batchResult.vault_anime_created;
+        totalResult.user_anime_data_created += batchResult.user_anime_data_created;
+      }
 
-        confirmed.push({
-          parsed: entry,
-          mal_id: result.approvedMatch.malId,
-          jikan_blob: blob,
-          search_confidence: result.confidence,
+      // Fire-and-forget: backfill characters/episodes for entries with partial blobs
+      const allMalIds = confirmed.map((e) => e.mal_id);
+      if (allMalIds.length > 0) {
+        fetch("/api/import/backfill", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ malIds: allMalIds }),
+        }).catch(() => {
+          // Background backfill — failure is non-critical
         });
       }
 
-      const res = await fetch("/api/import/ingest", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          entries: confirmed,
-          vault_id: vaultId,
-        }),
-      });
-
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "Import failed");
-      }
-
-      return res.json();
+      return totalResult;
     },
     [parsedEntries, searchResults]
   );

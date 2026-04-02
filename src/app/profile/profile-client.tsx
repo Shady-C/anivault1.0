@@ -196,7 +196,7 @@ export function ProfileClient({ profile, isAuthenticated }: ProfileClientProps) 
 
         <div
           className="flex items-center gap-4 p-4 rounded-2xl bg-[var(--card)] border border-[var(--card-border)] press-feedback cursor-pointer"
-          onClick={() => router.push("/profile/import")}
+          onClick={() => router.push("/import")}
         >
           <div className="w-10 h-10 rounded-xl bg-[var(--blue)]/20 flex items-center justify-center">
             <FileInput size={20} className="text-[var(--blue)]" />
